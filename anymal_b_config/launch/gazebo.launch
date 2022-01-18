@@ -1,0 +1,48 @@
+<launch>
+    <arg name="robot_name"         default="/"/> <!-- Change this for namespacing. -->
+    <arg name="gazebo_world"       default="worlds/empty.world" /> <!-- Path to Gazebo world you want to load. -->
+    <arg name="gui"                default="true"/>
+    <arg name="verbose"            default="false"/>
+    <arg name="pause"              default="false"/>
+    <arg name="world_init_x"       default="0" /> <!-- X Initial position of the robot in Gazebo World -->
+    <arg name="world_init_y"       default="0" /> <!-- Y Initial position of the robot in Gazebo World -->
+    <arg name="world_init_z"       default="1.2" />
+    <arg name="world_init_heading" default="0.0" /> <!-- Initial heading of the robot in Gazebo World -->
+    <arg name="ros_control_file"   default="$(find anymal_b_config)/config/ros_control/ros_control.yaml" /> <!-- Path to ROS Control configurations. Do not touch. -->
+    <arg name="description_file"   default="$(find anymal_b_config)/urdf/anymal_lidar_imu.urdf"/> <!-- Path to URDF file Do not touch this. -->
+
+    <param name="use_sim_time" value="true" />
+
+    <!-- ==================== 1) load gazebo world ==================== -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(arg gazebo_world)"/>
+        <arg name="gui" value="$(arg gui)" />
+        <arg name="verbose" value="$(arg verbose)"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="paused" value="$(arg pause)"/>
+        <arg name="headless" value="false"/>
+    </include>
+
+    <!-- ==================== 2) spawn gazebo model and ROS controller ==================== -->
+    <group ns="$(arg robot_name)">
+        <arg name="description_name"           default="robot_description"/>
+        <param name="$(arg description_name)" command="$(find xacro)/xacro --inorder '$(arg description_file)'"/>
+        <node  name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" args="-urdf -model $(arg robot_name)  
+        -param robot_description -robot_namespace $(arg robot_name) 
+        -x $(arg world_init_x) -y $(arg world_init_y) -z $(arg world_init_z) -Y $(arg world_init_heading)" />
+
+        <rosparam file="$(arg ros_control_file)" command="load"/>
+        <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="
+            joint_states_controller
+            joint_group_position_controller
+            ">
+        </node>
+    </group>
+
+    <!--- ==================== 3) load anymal_b robot model ==================== -->
+    <include file="$(find anymal_b_config)/launch/bringup.launch">
+        <arg name="robot_name"             value="$(arg robot_name)"/>
+    </include>
+
+
+</launch>
