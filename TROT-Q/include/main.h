@@ -209,6 +209,7 @@ void trot_q_class::depth_callback(const sensor_msgs::Image::ConstPtr& msg){
     else if (depth.encoding=="16UC1"){ // uint16_t (stdint.h) or ushort or unsigned_short
       cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth, "16UC1"); // == sensor_msgs::image_encodings::TYPE_16UC1
       for (int i=0; i<depth_ptr->image.rows; i++){
+        for (int j=0; j<depth_ptr->image.cols; j++){
           float temp_depth = depth_ptr->image.at<ushort>(i,j); //ushort!!! other makes error here!!! because encoding is "16UC"
           if (std::isnan(temp_depth)){
             p3d_empty.z = m_pcl_max_range * cos(abs(depth_ptr->image.cols/2.0 - j)/(depth_ptr->image.cols/2.0)*m_hfov/2.0);
@@ -267,7 +268,7 @@ void trot_q_class::tf_callback(const tf2_msgs::TFMessage::ConstPtr& msg){
       m_cvt_quat_z = q.getZ();
       m_cvt_quat_w = q.getW();
     }
-    if (msg->transforms[l].child_frame_id==m_pcl_base && !m_m_body_t_lidar_check){
+    if (msg->transforms[l].child_frame_id==m_pcl_base && !m_body_t_lidar_check){
       tf::Quaternion q2(msg->transforms[l].transform.rotation.x, msg->transforms[l].transform.rotation.y, msg->transforms[l].transform.rotation.z, msg->transforms[l].transform.rotation.w);
       tf::Matrix3x3 m2(q2);
       m_body_t_lidar(0,0) = m2[0][0];
@@ -285,9 +286,9 @@ void trot_q_class::tf_callback(const tf2_msgs::TFMessage::ConstPtr& msg){
       m_body_t_lidar(2,3) = msg->transforms[l].transform.translation.z;
       m_body_t_lidar(3,3) = 1.0;
 
-      m_m_body_t_lidar_check = true; // fixed!!!
+      m_body_t_lidar_check = true; // fixed!!!
     }
-    if (msg->transforms[l].child_frame_id==m_depth_base && !m_m_body_t_cam_check){
+    if (msg->transforms[l].child_frame_id==m_depth_base && !m_body_t_cam_check){
       tf::Quaternion q2(msg->transforms[l].transform.rotation.x, msg->transforms[l].transform.rotation.y, msg->transforms[l].transform.rotation.z, msg->transforms[l].transform.rotation.w);
       tf::Matrix3x3 m2(q2);
       m_body_t_cam(0,0) = m2[0][0];
@@ -305,13 +306,13 @@ void trot_q_class::tf_callback(const tf2_msgs::TFMessage::ConstPtr& msg){
       m_body_t_cam(2,3) = msg->transforms[l].transform.translation.z;
       m_body_t_cam(3,3) = 1.0;
 
-      m_m_body_t_cam_check = true; // fixed!!!
+      m_body_t_cam_check = true; // fixed!!!
     }
   }
   
   m_map_t_lidar = m_map_t_body * m_body_t_lidar ;
   m_map_t_cam = m_map_t_body * m_body_t_cam;
-  if (m_m_body_t_cam_check && m_m_body_t_lidar_check)
+  if (m_body_t_cam_check && m_body_t_lidar_check)
     m_tf_check=true;
 }
 

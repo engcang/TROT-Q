@@ -1,5 +1,12 @@
 # TROT-Q
-ASCC2022 - `EungChang Mason Lee, and Hyun Myung "TROT-Q: TRaversability and Obstacle aware Target tracking system for Quadruped robots"`
+#### ASCC2022 - `EungChang Mason Lee, and Hyun Myung "TROT-Q: TRaversability and Obstacle aware Target tracking system for Quadruped robots"`
++ Tracking detected target (`YOLOv4-tiny-3l` network is used)
++ `FAST-LIO2` SLAM is used to estimate the states
++ Traversability and obstacle collision are checked
++ Minimum Jerk Trajectory is tracked
++ High-level velocity MPC control
++ Low-level PID control
+
 
 <br>
 

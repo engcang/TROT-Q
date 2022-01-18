@@ -33,6 +33,8 @@ stamp_ ,self.body_link_name,"map")
         self.br.sendTransform((0.3, 0.0, 0.15), (0.5,-0.5,0.5,-0.5), stamp_ , self.camera_link_name, self.body_link_name)
         self.br.sendTransform((0.0, 0.0, 0.3), (0.0, 0.0, 0.0, 1.0), stamp_ , self.lidar_link_name, self.body_link_name)
 
+        self.br.sendTransform((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0), stamp_ , "camera_init", "map")
+
         return
 
 if __name__ == '__main__':
