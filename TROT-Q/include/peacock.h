@@ -13,18 +13,12 @@
 #include <Eigen/Eigen> // whole Eigen library : Sparse(Linearalgebra) + Dense(Core+Geometry+LU+Cholesky+SVD+QR+Eigenvalues)
 #include <unsupported/Eigen/CXX11/Tensor> // for Tensor!!
 
-#define sind(x) (sin(fmod((x),360.0) * M_PI / 180.0)) //cannot broadcast array, not used
-#define cosd(x) (cos(fmod((x),360.0) * M_PI / 180.0)) //cannot broadcast array, not used
 #define d2r M_PI/180.0
 #define r2d 180.0/M_PI
 
 using namespace std::chrono; 
 using namespace std;
 using namespace Eigen;
-
-////// for refinement
-vector<VectorXd> x_coeff, y_coeff, z_coeff;
-vector<double> time_each;
 
 ///// for local planner
 int row = 5;

@@ -17,6 +17,7 @@
 #include <tf/LinearMath/Matrix3x3.h> // to Quaternion_to_euler
 
 ///// headers for local_planner + controller
+#include <std_msgs/Bool.h>
 #include <tf2_msgs/TFMessage.h> //for tf between frames
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -67,7 +68,7 @@ class trot_q_class{
 
     ///// local planner
     double m_unknown_score_local, m_free_score_local;
-    bool m_score_debug;
+    bool m_new_path=true, m_score_debug;
 
     //// states
     Matrix4f m_map_t_lidar = Matrix4f::Identity();
@@ -82,7 +83,8 @@ class trot_q_class{
     ros::Subscriber m_pcl_sub;
     ros::Subscriber m_depth_sub;
     ros::Subscriber m_tf_sub;
-    ros::Publisher m_octomap_pub;
+    ros::Subscriber m_new_path_sub;
+    ros::Publisher m_octomap_pub, m_octomap_empty_pub;
     ros::Publisher m_best_branch_pub;
     ros::Publisher m_local_branch_pub;
     ros::Publisher m_local_branch_pub2;
@@ -101,6 +103,7 @@ class trot_q_class{
     void depth_callback(const sensor_msgs::Image::ConstPtr& msg);
     void pcl_callback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void tf_callback(const tf2_msgs::TFMessage::ConstPtr& msg);
+    void new_path_callback(const std_msgs::Bool::ConstPtr& msg);
     void octomap_Timer(const ros::TimerEvent& event);
     void local_planner_Timer(const ros::TimerEvent& event);
 
@@ -139,8 +142,10 @@ class trot_q_class{
       m_depth_sub = nh.subscribe<sensor_msgs::Image>(m_depth_topic, 10, &trot_q_class::depth_callback, this);
       m_pcl_sub = nh.subscribe<sensor_msgs::PointCloud2>(m_pcl_topic, 10, &trot_q_class::pcl_callback, this);
       m_tf_sub = nh.subscribe<tf2_msgs::TFMessage>("/tf", 10, &trot_q_class::tf_callback, this);
+      m_new_path_sub = nh.subscribe<std_msgs::Bool>("/new_path", 10, &trot_q_class::new_path_callback, this);
 
       m_octomap_pub = nh.advertise<sensor_msgs::PointCloud2>(m_octomap_topic, 10);
+      m_octomap_empty_pub = nh.advertise<sensor_msgs::PointCloud2>(m_octomap_topic+"_empty", 10);
       m_contact_points_pub = nh.advertise<sensor_msgs::PointCloud2>("/contact_points", 10);
 
       m_octo_update_and_publisher = nh.createTimer(ros::Duration(1/m_octomap_hz), &trot_q_class::octomap_Timer, this); // every hz
@@ -177,6 +182,10 @@ class trot_q_class{
 
 
 /////////////////////////////////////////// can be separated into .cpp source file from here
+
+void trot_q_class::new_path_callback(const std_msgs::Bool::ConstPtr& msg){
+  m_new_path=true;
+}
 
 void trot_q_class::depth_callback(const sensor_msgs::Image::ConstPtr& msg){
   sensor_msgs::Image depth=*msg;
@@ -354,19 +363,22 @@ void trot_q_class::octomap_Timer(const ros::TimerEvent& event){
     // does not remove using rays, but just stack
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr octo_pcl_pub(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr octo_pcl_empty_pub(new pcl::PointCloud<pcl::PointXYZ>());
     for (octomap::OcTree::iterator it=m_octree->begin(); it!=m_octree->end(); ++it){
       if(m_octree->isNodeOccupied(*it))
       {
         // if (it.getCoordinate().z()<2.2)
         octo_pcl_pub->push_back(pcl::PointXYZ(it.getCoordinate().x(), it.getCoordinate().y(), it.getCoordinate().z()));
       }
-      // else
-      // {
-      //   // free_oc++;
-      // }
+      else
+      {
+        octo_pcl_empty_pub->push_back(pcl::PointXYZ(it.getCoordinate().x(), it.getCoordinate().y(), it.getCoordinate().z()));
+        // free_oc++;
+      }
     }
     m_octo_check=true;
     m_octomap_pub.publish(cloud2msg(*octo_pcl_pub, m_fixed_frame));
+    m_octomap_empty_pub.publish(cloud2msg(*octo_pcl_empty_pub, m_fixed_frame));
   }
 }
 
@@ -519,28 +531,31 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
       m_contact_points_pub.publish(cloud2msg(*contact_pcl_pub, m_fixed_frame));
     // toc("peacock");
 
-    best_score_path(loc_score);
-    if (m_score_debug) 
-      {cout << max_score << " " << best_row << " " << best_col << endl<< loc_score << endl <<endl;}
+    if(m_new_path){
+      best_score_path(loc_score);
+      if (m_score_debug) 
+        {cout << max_score << " " << best_row << " " << best_col << endl<< loc_score << endl <<endl;}
 
-    nav_msgs::Path path;
-    path.header.frame_id = m_fixed_frame;
-    geometry_msgs::PoseStamped p;
-    for (double t=0.0; t<= T; t+=0.2*T){
-      p.pose.position.x = cx(best_row,best_col,0)*pow(t,5) + cx(best_row,best_col,1)*pow(t,4) + cx(best_row,best_col,2)*pow(t,3) + cx(best_row,best_col,3)*pow(t,2) + cx(best_row,best_col,4)*t + cx(best_row,best_col,5);
-      p.pose.position.y = cy(best_row,best_col,0)*pow(t,5) + cy(best_row,best_col,1)*pow(t,4) + cy(best_row,best_col,2)*pow(t,3) + cy(best_row,best_col,3)*pow(t,2) + cy(best_row,best_col,4)*t + cy(best_row,best_col,5);
-      p.pose.position.z = cz(best_row,0)*pow(t,5) + cz(best_row,1)*pow(t,4) + cz(best_row,2)*pow(t,3) + cz(best_row,3)*pow(t,2) + cz(best_row,4)*t + cz(best_row,5);
-      tf::Quaternion q;
-      q.setRPY(0, 0, yaw(best_row,best_col)*t/T);
-      p.pose.orientation.x = q.getX();
-      p.pose.orientation.y = q.getY();
-      p.pose.orientation.z = q.getZ();
-      p.pose.orientation.w = q.getW();
+      nav_msgs::Path path;
+      path.header.frame_id = m_fixed_frame;
+      geometry_msgs::PoseStamped p;
+      for (double t=0.0; t<= T; t+=0.1*T){
+        p.pose.position.x = cx(best_row,best_col,0)*pow(t,5) + cx(best_row,best_col,1)*pow(t,4) + cx(best_row,best_col,2)*pow(t,3) + cx(best_row,best_col,3)*pow(t,2) + cx(best_row,best_col,4)*t + cx(best_row,best_col,5);
+        p.pose.position.y = cy(best_row,best_col,0)*pow(t,5) + cy(best_row,best_col,1)*pow(t,4) + cy(best_row,best_col,2)*pow(t,3) + cy(best_row,best_col,3)*pow(t,2) + cy(best_row,best_col,4)*t + cy(best_row,best_col,5);
+        p.pose.position.z = cz(best_row,0)*pow(t,5) + cz(best_row,1)*pow(t,4) + cz(best_row,2)*pow(t,3) + cz(best_row,3)*pow(t,2) + cz(best_row,4)*t + cz(best_row,5);
+        tf::Quaternion q;
+        q.setRPY(0, 0, yaw(best_row,best_col)*t/T);
+        p.pose.orientation.x = q.getX();
+        p.pose.orientation.y = q.getY();
+        p.pose.orientation.z = q.getZ();
+        p.pose.orientation.w = q.getW();
 
-      geometry_msgs::PoseStamped tf_p = tf_pose(p, m_map_t_body);
-      path.poses.push_back(tf_p);
+        geometry_msgs::PoseStamped tf_p = tf_pose(p, m_map_t_body);
+        path.poses.push_back(tf_p);
+      }
+      m_best_branch_pub.publish(path);
+      m_new_path=false;
     }
-    m_best_branch_pub.publish(path);
   }
 }
 

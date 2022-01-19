@@ -67,4 +67,4 @@ $ roslaunch trot-q main.launch
 + [FAST-LIO2](https://github.com/hku-mars/FAST_LIO)
 
 ### Object Detection
-+ ROS-YOLO using OpenCV/OpenVINO code: from [here (myself)](https://github.com/engcang/ros-yolo-sort/blob/master/YOLO_and_ROS_ver/ros_opencv_dnn.py)
++ ROS-YOLO using `OpenCV` code: from [here (myself)](https://github.com/engcang/ros-yolo-sort/blob/master/YOLO_and_ROS_ver/ros_opencv_dnn.py)

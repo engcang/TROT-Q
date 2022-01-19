@@ -27,15 +27,16 @@
   <param name="/unknown_score_local" value="0.09"/>
   <param name="/free_score_local" value="0.11"/> <!-- lambda -->
 
-  <param name="/collision_r" value="0.3"/>
+  <param name="/collision_r" value="0.4"/>
+
 
   <!-- Nodes  -->
 
   <!-- main code: traversability check, obstacle check, trajectory generate, select  -->
   <node name="trot_qr" pkg="trot-q" type="trot-q_node" output="screen"/>
-  <!-- launch-prefix="gdb -ex run --> <!--args" -->
-
+                      <!-- launch-prefix="gdb -ex run --> <!--args" -->
   <!-- High-level control code (MPC) -->
+  <!-- <node name="mpc-control" pkg="trot-q" type="mpc-slsqp.py"/> -->
 
   <!-- tf publisher  -->
   <node name="tf_broadcaster" pkg="trot-q" type="tf_broadcaster.py"/>
