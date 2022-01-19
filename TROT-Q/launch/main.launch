@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <launch>
+
   <param name="/score_debug" value="false"/>
 
   <param name="/hfov" value="1.5708"/>
@@ -27,7 +28,8 @@
   <param name="/unknown_score_local" value="0.09"/>
   <param name="/free_score_local" value="0.11"/> <!-- lambda -->
 
-  <param name="/collision_r" value="0.4"/>
+  <param name="/collision_r" value="0.6"/>
+
 
 
   <!-- Nodes  -->
@@ -35,12 +37,27 @@
   <!-- main code: traversability check, obstacle check, trajectory generate, select  -->
   <node name="trot_qr" pkg="trot-q" type="trot-q_node" output="screen"/>
                       <!-- launch-prefix="gdb -ex run --> <!--args" -->
+
   <!-- High-level control code (MPC) -->
   <!-- <node name="mpc-control" pkg="trot-q" type="mpc-slsqp.py"/> -->
 
-  <!-- tf publisher  -->
-  <node name="tf_broadcaster" pkg="trot-q" type="tf_broadcaster.py"/>
+  <!-- YOLO -->
+  <node name="yolo_ros_simple_node" pkg="yolo_ros_simple" type="ros_open_dnn.py">
+    <param name="/inference_rate" value="10"/>
+    <param name="/img_in_topic" value="/d455/depth/rgb_image_raw"/>
+    <param name="/img_out_topic" value="/detected"/>
+    <param name="/bbox_out_topic" value="/bboxes"/>
+    <param name="/confidence_threshold" value="0.8"/>
+    <param name="/nms_threshold" value="0.4"/>
+    <param name="/class_file" value="$(find yolo_ros_simple)/scripts/class.txt"/>
+    <param name="/weight_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj_final.weights"/>
+    <param name="/cfg_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj.cfg"/>
+  </node>
+
   <!-- SLAM: FAST-LIO2 -->
   <include file="$(find trot-q)/launch/include/mapping_ouster64.launch"/>
+
+  <!-- tf publisher  -->
+  <node name="tf_broadcaster" pkg="trot-q" type="tf_broadcaster.py"/>
 
 </launch>

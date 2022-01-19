@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="robot_namespace" default="jackal"/>
+
+  <arg name="x" default="12.0"/>
+  <arg name="y" default="6.0"/>
+  <arg name="z" default="0.3"/>
+  <arg name="yaw" default="0.0"/>
+
+
+  <group ns="$(arg robot_namespace)">
+
+    <param name="robot_description" command="$(find xacro)/xacro '$(find jackal_package_for_gazebo)/urdf/jackal.urdf.xacro' robot_namespace:=$(arg robot_namespace)" />
+    <param name="tf_prefix" value="$(arg robot_namespace)" />
+
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+    <!-- Load controller configuration -->
+    <rosparam command="load" file="$(find jackal_package_for_gazebo)/config/control.yaml" />
+    <!-- Spawn controllers -->
+    <node name="base_controller_spawner" pkg="controller_manager" type="spawner"
+          args="jackal_joint_publisher jackal_velocity_controller"/>
+
+    <!-- Spawn robot in gazebo -->
+    <node name="spawn_husky_model" pkg="gazebo_ros" type="spawn_model"
+        args="-x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg yaw) -unpause -urdf
+              -param robot_description -model $(arg robot_namespace)
+              -robot_namespace $(arg robot_namespace)" />
+
+  </group>
+
+</launch>

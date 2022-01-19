@@ -41,9 +41,10 @@ $ catkin build -DCMAKE_BUILD_TYPE=Release
 
 ### How to run
 + Launch Gazebo world
-	+ change `world`, if you want.
+	+ Change `world` in the launch file, if you want.
+    + Check `dev` of `joystick` to manually control `Jackal` in the launch file.
 ~~~shell
-$ roslaunch anymal_b_config gazebo.launch
+$ roslaunch trot-q gazebo.launch
 ~~~
 + Run `TROT-Q`
 ~~~shell

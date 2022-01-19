@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   pcl_conversions
   pcl_ros
+  yolo_ros_simple
 )
 
 find_package(Eigen3 REQUIRED)

@@ -1,6 +1,6 @@
 <launch>
     <arg name="robot_name"         default="/"/> <!-- Change this for namespacing. -->
-    <arg name="gazebo_world"       default="$(find trot-q)/../gazebo_maps/height_maze/quad_hole_ground.world" /> <!-- Path to Gazebo world you want to load. -->
+    <arg name="gazebo_world"       default="worlds/empty.world" /> <!-- Path to Gazebo world you want to load. -->
     <arg name="gui"                default="true"/>
     <arg name="verbose"            default="false"/>
     <arg name="pause"              default="false"/>

@@ -28,8 +28,7 @@ class cv_yolo_ros():
         rospy.init_node('cv_yolo_ros_node', anonymous=True)
         self.flag = False
         self.inference_rate = rospy.get_param("/inference_rate", 30)
-        self.img_in_topic = rospy.get_param("/img_in_topic", "/d435i/stereo_ir/left/image_raw")
-        self.img_out = rospy.get_param("/img_out", True)
+        self.img_in_topic = rospy.get_param("/img_in_topic", "/d455/depth/rgb_image_raw")
         self.img_out_topic = rospy.get_param("/img_out_topic", "/detected")
         self.bbox_out_topic = rospy.get_param("/bbox_out_topic", "/bboxes")
 

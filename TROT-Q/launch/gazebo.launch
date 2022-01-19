@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+
+	<arg name="gazebo_world_name" default="$(find trot-q)/../gazebo_maps/height_maze/quad_hole_ground.world" />
+
+  <!-- ANYMAL-B Spawner and Gazebo world -->
+  <include file="$(find anymal_b_config)/launch/gazebo.launch">
+  	<arg name="gazebo_world" value="$(arg gazebo_world_name)"/>
+    <arg name="world_init_x"       value="-8.0" /> 
+    <arg name="world_init_y"       value="-1.6" /> 
+    <arg name="world_init_z"       value="1.2" />
+    <arg name="world_init_heading" value="0.0" /> 
+  </include>
+
+  <!-- Jackal Spawner -->
+  <include file="$(find jackal_package_for_gazebo)/launch/gazebo.launch">
+	  <arg name="x" value="2.0"/>
+	  <arg name="y" value="-1.0"/>
+	  <arg name="z" value="0.5"/>
+	  <arg name="yaw" value="0.0"/>
+  </include>
+
+  <!-- manual controller for Jackal -->
+  <node name="joy_ros" pkg="joy" type="joy_node">
+      <param name="/dev" value="/dev/input/js1"/>
+  </node>
+  <node name="ctrl_joy" pkg="jackal_package_for_gazebo" type="joy_controller.py" output="screen"/>
+
+</launch>
