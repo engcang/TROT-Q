@@ -20,6 +20,17 @@ def signal_handler(signal, frame): # ctrl + c -> exit program
 signal.signal(signal.SIGINT, signal_handler)
 
 
+def distance(x1, y1, x2, y2):
+    return sqrt(pow(x1-x2, 2) + pow(y1-y2, 2))
+
+def rpy_saturation(angle):
+    if angle>np.pi:
+        angle=angle-2*np.pi
+    if angle<-np.pi:
+        angle=angle+2*np.pi
+    return angle
+
+
 class mpc_ctrl():
     def __init__(self):
 
@@ -40,12 +51,12 @@ class mpc_ctrl():
         self.dt = 0.1
         self.num_inputs = 3 # linear_x, linear_y, angular_z (v, s, w)
 
-        self.v_min = -0.6
-        self.v_max = 0.6
-        self.s_min = -0.15
-        self.s_max = 0.15
-        self.w_min = -0.65
-        self.w_max = 0.65
+        self.v_min = 0.0
+        self.v_max = 0.5
+        self.s_min = -0.12
+        self.s_max = 0.12
+        self.w_min = -0.7
+        self.w_max = 0.7
         self.bounds = []
         for i in range(self.horizon):
             self.bounds += [[self.v_min, self.v_max]]
@@ -58,7 +69,7 @@ class mpc_ctrl():
         self.position_weight = 1.0
         self.yaw_weight = 1.0
         self.input_weight = 0.5
-        self.input_smoothness_weight = 1.0
+        self.input_smoothness_weight = 2.0
 
 
     def pose_cb(self, msg):
@@ -69,9 +80,9 @@ class mpc_ctrl():
         ### mpc start
         tic = time.time()
         if self.traj_in:
-            current_state = np.array([current_pose.x, current_pose.y, yaw])
+            current_state = np.array([current_pose.x, current_pose.y, rpy_saturation(yaw)])
 
-            if distance(current_state[0], current_state[1], self.traj_ref[0], self.traj_ref[1]) < 0.6:
+            if distance(current_state[0], current_state[1], self.traj_ref[0], self.traj_ref[1]) < 0.8:
                 self.new_path_pub.publish(self.new_path_msg)
 
             for i in range(self.num_inputs):
@@ -81,7 +92,7 @@ class mpc_ctrl():
             u_solution = minimize(self.cost_function, self.u, (current_state, self.traj_ref),
                                   method='SLSQP', bounds=self.bounds, tol=1e-4, options = {'disp': False}) #disp - debugging
             self.u = u_solution.x
-            print(u_solution.x) #solution is stored in "x"
+            # print(u_solution.x) #solution is stored in "x"
             # print(u_solution.success)
             # print(u_solution.message)
 
@@ -100,7 +111,7 @@ class mpc_ctrl():
             ref_x = msg.poses[last_idx].pose.position.x
             ref_y = msg.poses[last_idx].pose.position.y
             _, _, ref_yaw = euler_from_quaternion([msg.poses[last_idx].pose.orientation.x, msg.poses[last_idx].pose.orientation.y, msg.poses[last_idx].pose.orientation.z, msg.poses[last_idx].pose.orientation.w])
-            self.traj_ref = np.array([ref_x, ref_y, ref_yaw])
+            self.traj_ref = np.array([ref_x, ref_y, rpy_saturation(ref_yaw)])
             self.traj_in=True
         return
 
@@ -115,7 +126,7 @@ class mpc_ctrl():
             #tracking cost
             cost += self.position_weight * pow(curr_state[0]-ref[0], 2)
             cost += self.position_weight * pow(curr_state[1]-ref[1], 2)
-            cost += self.yaw_weight * pow(curr_state[2]-ref[2], 2)
+            cost += self.yaw_weight * pow(rpy_saturation(curr_state[2]-ref[2]), 2)
 
             #input cost
             cost += self.input_weight * pow(u[i*self.num_inputs], 2)
@@ -137,12 +148,9 @@ class mpc_ctrl():
 
         x_t_1 = x_t + (v*cos(yaw_t) - s*sin(yaw_t))*dt
         y_t_1 = y_t + (v*sin(yaw_t) + s*cos(yaw_t))*dt
-        yaw_t_1 = yaw_t + w*dt
+        yaw_t_1 = rpy_saturation(yaw_t + w*dt)
         return [x_t_1, y_t_1, yaw_t_1]
 
-
-def distance(x1, y1, x2, y2):
-    return sqrt(pow(x1-x2, 2) + pow(y1-y2, 2))
 
 
 if __name__ == '__main__':

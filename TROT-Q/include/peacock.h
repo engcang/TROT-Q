@@ -21,86 +21,83 @@ using namespace std;
 using namespace Eigen;
 
 ///// for local planner
-int row = 5;
-int col = 37;
-int branch = 7;
+int g_row = 3;
+int g_col = 37;
+int g_branch = 7;
 
 ////// V*T = length of trajectory, recommend half of the sensor range
-double v = 0.5; // Linear velocity
-double T = 1.75/0.5; // time for next step
+double g_v = 0.5; // Linear velocity
+double g_T = 1.75/0.5; // time for next step
 
-double yaw_unit = 5.0;
-double pitch_unit = 5.0;
-double branch_yaw_unit = 5.0;
+double g_yaw_unit = 5.0;
+double g_pitch_unit = 5.0;
+double g_branch_yaw_unit = 5.0;
 
-double yaw_curr = 0.0; // current yaw of uav
-MatrixXd yaw_init = MatrixXd::Zero(row,col); // +floor(col/2)*yaw_unit ~ -floor(col/2)*yaw_unit yaw -> in radian by multiplying d2r
-MatrixXd yaw = MatrixXd::Zero(row,col); // yaw_init + yaw_curr
+double g_yaw_curr = 0.0; // current yaw of uav
+MatrixXd g_yaw_init = MatrixXd::Zero(g_row,g_col); // +floor(g_col/2)*g_yaw_unit ~ -floor(g_col/2)*g_yaw_unit yaw -> in radian by multiplying d2r
+MatrixXd g_yaw = MatrixXd::Zero(g_row,g_col); // g_yaw_init + g_yaw_curr
 
-MatrixXd pitch = MatrixXd::Zero(row,col); // -floor(row/2)*pitch_unit ~ +floor(row/2)*pitch_unit -> in radian by multiplying d2r
-MatrixXd pitch_z = MatrixXd::Zero(row,1); // -floor(row/2)*pitch_unit ~ +floor(row/2)*pitch_unit -> in radian by multiplying d2r
+MatrixXd g_pitch = MatrixXd::Zero(g_row,g_col); // -floor(g_row/2)*g_pitch_unit ~ +floor(g_row/2)*g_pitch_unit -> in radian by multiplying d2r
+MatrixXd g_pitch_z = MatrixXd::Zero(g_row,1); // -floor(g_row/2)*g_pitch_unit ~ +floor(g_row/2)*g_pitch_unit -> in radian by multiplying d2r
 
-MatrixXd x_1 = MatrixXd::Zero(row,col);
-MatrixXd x_2 = MatrixXd::Zero(row,col);
-MatrixXd y_1 = MatrixXd::Zero(row,col);
-MatrixXd y_2 = MatrixXd::Zero(row,col);
-MatrixXd vx_1 = MatrixXd::Zero(row,col);
-MatrixXd vx_2 = MatrixXd::Zero(row,col);
-MatrixXd vy_1 = MatrixXd::Zero(row,col);
-MatrixXd vy_2 = MatrixXd::Zero(row,col);
-MatrixXd z_1 = MatrixXd::Zero(row,1);
-MatrixXd z_2 = MatrixXd::Zero(row,1);
-MatrixXd vz_1 = MatrixXd::Zero(row,1); // zero
-MatrixXd vz_2 = MatrixXd::Zero(row,1); // zero
+MatrixXd g_x_1 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_x_2 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_y_1 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_y_2 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_vx_1 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_vx_2 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_vy_1 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_vy_2 = MatrixXd::Zero(g_row,g_col);
+MatrixXd g_z_1 = MatrixXd::Zero(g_row,1);
+MatrixXd g_z_2 = MatrixXd::Zero(g_row,1);
+MatrixXd g_vz_1 = MatrixXd::Zero(g_row,1); // zero
+MatrixXd g_vz_2 = MatrixXd::Zero(g_row,1); // zero
 
-Tensor<double, 3> yaw_bar(row,col,branch); // for higher than 2-dimentional rank matrix.
-Tensor<double, 3> sx_2(row,col,branch);
-Tensor<double, 3> sy_2(row,col,branch);
-MatrixXd sz_2 = MatrixXd::Zero(row,1);
-Tensor<double, 3> svx_2(row,col,branch);
-Tensor<double, 3> svy_2(row,col,branch);
-MatrixXd svz_2 = MatrixXd::Zero(row,1); // zero
+Tensor<double, 3> g_yaw_bar(g_row,g_col,g_branch); // for higher than 2-dimentional rank matrix.
+Tensor<double, 3> g_sx_2(g_row,g_col,g_branch);
+Tensor<double, 3> g_sy_2(g_row,g_col,g_branch);
+MatrixXd g_sz_2 = MatrixXd::Zero(g_row,1);
+Tensor<double, 3> g_svx_2(g_row,g_col,g_branch);
+Tensor<double, 3> g_svy_2(g_row,g_col,g_branch);
+MatrixXd g_svz_2 = MatrixXd::Zero(g_row,1); // zero
 
-MatrixXd A = MatrixXd::Zero(6,6);
-Tensor<double, 3> cx(row,col,6); // for higher than 2-dimentional rank matrix.
-Tensor<double, 3> cy(row,col,6);
-MatrixXd cz = MatrixXd::Zero(row,6);
-Tensor<double, 4> scx(row,col,branch,6); // for higher than 2-dimentional rank matrix.
-Tensor<double, 4> scy(row,col,branch,6);
-MatrixXd scz = MatrixXd::Zero(row,6);
-bool local_init=false;
+MatrixXd g_A = MatrixXd::Zero(6,6);
+Tensor<double, 3> g_cx(g_row,g_col,6); // for higher than 2-dimentional rank matrix.
+Tensor<double, 3> g_cy(g_row,g_col,6);
+MatrixXd g_cz = MatrixXd::Zero(g_row,6);
+Tensor<double, 4> g_scx(g_row,g_col,g_branch,6); // for higher than 2-dimentional rank matrix.
+Tensor<double, 4> g_scy(g_row,g_col,g_branch,6);
+MatrixXd g_scz = MatrixXd::Zero(g_row,6);
+bool g_local_init=false;
 
-MatrixXd loc_score = MatrixXd::Zero(row,col);   //score for counting feasible paths
-MatrixXd straight_filter = MatrixXd::Zero(row,col);
-MatrixXf::Index best_row, best_col;
-float max_score;
+MatrixXd g_loc_score = MatrixXd::Zero(g_row,g_col);   //score for counting feasible paths
+MatrixXd g_distance_score = MatrixXd::Zero(g_row,g_col);   //score for counting feasible paths
+MatrixXf::Index g_best_row, g_best_col;
+float g_max_score;
 
 
 /////////// For path planning
-void best_score_path(MatrixXd score_mat){
-  // max_frontier_score = frontier_score_mat.maxCoeff(&best_row, &best_col);
-  // if (max_frontier_score>1.2) score_mat = score_mat.array() * frontier_score_mat.array();
-  max_score = score_mat.maxCoeff(&best_row, &best_col);
+void best_score_path(MatrixXd score_mat, MatrixXd dist_score_mat){
+  // max_frontier_score = frontier_score_mat.maxCoeff(&g_best_row, &g_best_col);
+  // if (max_frontier_score>1.2) 
+  score_mat = score_mat.array() * dist_score_mat.array();
+  g_max_score = score_mat.maxCoeff(&g_best_row, &g_best_col);
 
   vector<int> tmp_cols, tmp_rows;
-  for (int i = 0; i < row; i++){
-    for (int j = 0; j < col; j++){
-      if (abs(score_mat(i,j)-max_score)<0.01){  // numerical error tolerance
+  for (int i = 0; i < g_row; i++){
+    for (int j = 0; j < g_col; j++){
+      if (abs(score_mat(i,j)-g_max_score)<0.01){  // numerical error tolerance
         tmp_rows.push_back(i);
         tmp_cols.push_back(j);
       }
     }
   }
-  // if ((tmp_cols.size()>floor(col*row/2.0)) && (tmp_rows.size()>floor(col*row/2.0))){ // when score does not matter, straight
-  //   score_mat = score_mat.array() * straight_filter.array();
-  //   max_score = score_mat.maxCoeff(&best_row, &best_col);
-  // }
-  // else{
-    sort(tmp_cols.begin(), tmp_cols.end());
-    sort(tmp_rows.begin(), tmp_rows.end());
-    best_col = tmp_cols.at(floor(tmp_cols.size()/2)); //median
-    best_row = tmp_rows.at(floor(tmp_rows.size()/2)); //median
-  // }
+
+  sort(tmp_cols.begin(), tmp_cols.end());
+  sort(tmp_rows.begin(), tmp_rows.end());
+  g_best_col = tmp_cols.at(floor(tmp_cols.size()/2)); //median
+  g_best_row = tmp_rows.at(floor(tmp_rows.size()/2)); //median
+
   return;
 }
 
@@ -110,70 +107,68 @@ void minimum_jerk_trajectories_initialize(){
   auto t_start = high_resolution_clock::now();
 
   ////// yaw, pitch init
-  for (int i=0; i<row; i++)
+  for (int i=0; i<g_row; i++)
   {
-    for (int j=0; j<col; j++)
+    for (int j=0; j<g_col; j++)
     {
-       yaw_init(i,j) = -(j-floor(col/2))*yaw_unit * d2r; // yaw : + --> -
-       pitch(i,j) = (i-floor(row/2))*pitch_unit * d2r;
-       straight_filter(i,j) = 1 - (abs(i-floor(row/2))+abs(j-floor(col/2)))*0.01;
+       g_yaw_init(i,j) = -(j-floor(g_col/2))*g_yaw_unit * d2r; // yaw : + --> -
+       g_pitch(i,j) = (i-floor(g_row/2))*g_pitch_unit * d2r;
     }
-    pitch_z(i,0) = (i-floor(row/2))*pitch_unit * d2r;
+    g_pitch_z(i,0) = (i-floor(g_row/2))*g_pitch_unit * d2r;
   } // should be run once
-  yaw = yaw_init.array() + yaw_curr;
+  g_yaw = g_yaw_init.array() + g_yaw_curr;
 
   ///// x,y,z vx,vy,vz constraints set
-  x_2 = (x_1.array() + v*T*cos(yaw.array())) * cos(pitch.array());
-  y_2 = (y_1.array() + v*T*sin(yaw.array())) * cos(pitch.array());
-  z_2 = z_1.array() - v*T*sin(pitch_z.array());
-  sz_2 = z_2.array() - v*T*sin(pitch_z.array());
+  g_x_2 = (g_x_1.array() + g_v*g_T*cos(g_yaw.array())) * cos(g_pitch.array());
+  g_y_2 = (g_y_1.array() + g_v*g_T*sin(g_yaw.array())) * cos(g_pitch.array());
+  g_z_2 = g_z_1.array() - g_v*g_T*sin(g_pitch_z.array());
+  g_sz_2 = g_z_2.array() - g_v*g_T*sin(g_pitch_z.array());
 
-  vx_1 = vx_1.array() + v*cos(yaw_curr);
-  vy_1 = vy_1.array() + v*sin(yaw_curr);
-  // vx_2 = v*cos(yaw.array());
-  // vy_2 = v*sin(yaw.array());
-  vx_2 = v*cos(yaw.array()) * cos(pitch.array()); 
-  vy_2 = v*sin(yaw.array()) * cos(pitch.array());
-  vz_2 = vz_1.array() - v*sin(pitch_z.array());
-  svz_2 = vz_2;
+  g_vx_1 = g_vx_1.array() + g_v*cos(g_yaw_curr);
+  g_vy_1 = g_vy_1.array() + g_v*sin(g_yaw_curr);
 
-  ///// Ax=b linear systems solving, x = cx, cy, cz
-  A << 0, 0, 0, 0, 0, 1,
-    pow(T,5), pow(T,4), pow(T,3), pow(T,2), T, 1,
+  g_vx_2 = g_v*cos(g_yaw.array()) * cos(g_pitch.array()); 
+  g_vy_2 = g_v*sin(g_yaw.array()) * cos(g_pitch.array());
+  g_vz_2 = g_vz_1.array() - g_v*sin(g_pitch_z.array());
+  g_svz_2 = g_vz_2;
+
+  ///// Ax=b linear systems solving, x = g_cx, g_cy, g_cz
+  g_A << 0, 0, 0, 0, 0, 1,
+    pow(g_T,5), pow(g_T,4), pow(g_T,3), pow(g_T,2), g_T, 1,
     0, 0, 0, 0, 1, 0,
-    5*pow(T,4), 4*pow(T,3), 3*pow(T,2), 2*T, 1, 0,
+    5*pow(g_T,4), 4*pow(g_T,3), 3*pow(g_T,2), 2*g_T, 1, 0,
     0, 0, 0, 2, 0, 0,
-    20*pow(T,3), 12*pow(T,2), 6*T, 2, 0, 0;
+    20*pow(g_T,3), 12*pow(g_T,2), 6*g_T, 2, 0, 0;
 
-  for (int i=0; i<row; i++)
+  for (int i=0; i<g_row; i++)
   {
     VectorXd b_z(6);
     VectorXd z_(6);
-    b_z << z_1(i), z_2(i), vz_1(i), vz_2(i), 0, 0; //vz_1=vz_2=0, a=0
-    z_ = A.lu().solve(b_z);
-    cz.row(i) = z_;
-    for (int j=0; j<col; j++)
+    b_z << g_z_1(i), g_z_2(i), g_vz_1(i), g_vz_2(i), 0, 0; //g_vz_1=g_vz_2=0, a=0
+    z_ = g_A.lu().solve(b_z);
+    g_cz.row(i) = z_;
+    for (int j=0; j<g_col; j++)
     {
        VectorXd b_x(6);
        VectorXd b_y(6);
        VectorXd x_(6);
        VectorXd y_(6);
-       b_x << x_1(i,j), x_2(i,j), vx_1(i,j), vx_2(i,j), 0, 0; //a=0
-       b_y << y_1(i,j), y_2(i,j), vy_1(i,j), vy_2(i,j), 0, 0; //a=0
-       x_ = A.lu().solve(b_x);
-       y_ = A.lu().solve(b_y);
-       cx(i,j,0) = x_(0);
-       cx(i,j,1) = x_(1);
-       cx(i,j,2) = x_(2);
-       cx(i,j,3) = x_(3);
-       cx(i,j,4) = x_(4);
-       cx(i,j,5) = x_(5);
-       cy(i,j,0) = y_(0);
-       cy(i,j,1) = y_(1);
-       cy(i,j,2) = y_(2);
-       cy(i,j,3) = y_(3);
-       cy(i,j,4) = y_(4);
-       cy(i,j,5) = y_(5);
+       b_x << g_x_1(i,j), g_x_2(i,j), g_vx_1(i,j), g_vx_2(i,j), 0, 0; //a=0
+       b_y << g_y_1(i,j), g_y_2(i,j), g_vy_1(i,j), g_vy_2(i,j), 0, 0; //a=0
+       x_ = g_A.lu().solve(b_x);
+       y_ = g_A.lu().solve(b_y);
+       g_cx(i,j,0) = x_(0);
+       g_cx(i,j,1) = x_(1);
+       g_cx(i,j,2) = x_(2);
+       g_cx(i,j,3) = x_(3);
+       g_cx(i,j,4) = x_(4);
+       g_cx(i,j,5) = x_(5);
+       g_cy(i,j,0) = y_(0);
+       g_cy(i,j,1) = y_(1);
+       g_cy(i,j,2) = y_(2);
+       g_cy(i,j,3) = y_(3);
+       g_cy(i,j,4) = y_(4);
+       g_cy(i,j,5) = y_(5);
     }
   }
 
@@ -186,47 +181,43 @@ void minimum_jerk_trajectories_initialize(){
   ///// Second branches /////////////////////////////////
   auto t_start2 = high_resolution_clock::now();
 
-  for (int i = 0; i < row; ++i)
+  for (int i = 0; i < g_row; ++i)
   {
     VectorXd b_z(6);
     VectorXd z_(6);
-    b_z << z_2(i), sz_2(i), vz_2(i), svz_2(i), 0, 0; //z_2=z_2, vz_2=svz_2=0 //a=0
-    z_ = A.lu().solve(b_z);
-    scz.row(i) = z_;
-    for (int j = 0; j < col; ++j)
+    b_z << g_z_2(i), g_sz_2(i), g_vz_2(i), g_svz_2(i), 0, 0; //g_z_2=g_z_2, g_vz_2=g_svz_2=0 //a=0
+    z_ = g_A.lu().solve(b_z);
+    g_scz.row(i) = z_;
+    for (int j = 0; j < g_col; ++j)
     {
-       for (int b = 0; b < branch; b++)
+       for (int b = 0; b < g_branch; b++)
        {
-          yaw_bar(i,j,b) = yaw(i,j) - (b-floor(branch/2)) * branch_yaw_unit *d2r; // yaw : + --> -
-          sx_2(i,j,b) = x_2(i,j) + v*T*cos(yaw_bar(i,j,b)) * cos(pitch(i,j));
-          sy_2(i,j,b) = y_2(i,j) + v*T*sin(yaw_bar(i,j,b)) * cos(pitch(i,j));
-          svx_2(i,j,b) = v*cos(yaw_bar(i,j,b)) * cos(pitch(i,j));
-          svy_2(i,j,b) = v*sin(yaw_bar(i,j,b)) * cos(pitch(i,j));
-          // sx_2(i,j,b) = x_2(i,j) + v*T*cos(yaw_bar(i,j,b));
-          // sy_2(i,j,b) = y_2(i,j) + v*T*sin(yaw_bar(i,j,b));
-          // svx_2(i,j,b) = v*cos(yaw_bar(i,j,b));
-          // svy_2(i,j,b) = v*sin(yaw_bar(i,j,b));
+          g_yaw_bar(i,j,b) = g_yaw(i,j) - (b-floor(g_branch/2)) * g_branch_yaw_unit *d2r; // yaw : + --> -
+          g_sx_2(i,j,b) = g_x_2(i,j) + g_v*g_T*cos(g_yaw_bar(i,j,b)) * cos(g_pitch(i,j));
+          g_sy_2(i,j,b) = g_y_2(i,j) + g_v*g_T*sin(g_yaw_bar(i,j,b)) * cos(g_pitch(i,j));
+          g_svx_2(i,j,b) = g_v*cos(g_yaw_bar(i,j,b)) * cos(g_pitch(i,j));
+          g_svy_2(i,j,b) = g_v*sin(g_yaw_bar(i,j,b)) * cos(g_pitch(i,j));
 
           VectorXd b_x(6);
           VectorXd b_y(6);
           VectorXd x_(6);
           VectorXd y_(6);
-          b_x << x_2(i,j), sx_2(i,j,b), vx_2(i,j), svx_2(i,j,b), 0, 0; //a=0
-          b_y << y_2(i,j), sy_2(i,j,b), vy_2(i,j), svy_2(i,j,b), 0, 0; //a=0
-          x_ = A.lu().solve(b_x);
-          y_ = A.lu().solve(b_y);
-          scx(i,j,b,0) = x_(0);
-          scx(i,j,b,1) = x_(1);
-          scx(i,j,b,2) = x_(2);
-          scx(i,j,b,3) = x_(3);
-          scx(i,j,b,4) = x_(4);
-          scx(i,j,b,5) = x_(5);
-          scy(i,j,b,0) = y_(0);
-          scy(i,j,b,1) = y_(1);
-          scy(i,j,b,2) = y_(2);
-          scy(i,j,b,3) = y_(3);
-          scy(i,j,b,4) = y_(4);
-          scy(i,j,b,5) = y_(5);
+          b_x << g_x_2(i,j), g_sx_2(i,j,b), g_vx_2(i,j), g_svx_2(i,j,b), 0, 0; //a=0
+          b_y << g_y_2(i,j), g_sy_2(i,j,b), g_vy_2(i,j), g_svy_2(i,j,b), 0, 0; //a=0
+          x_ = g_A.lu().solve(b_x);
+          y_ = g_A.lu().solve(b_y);
+          g_scx(i,j,b,0) = x_(0);
+          g_scx(i,j,b,1) = x_(1);
+          g_scx(i,j,b,2) = x_(2);
+          g_scx(i,j,b,3) = x_(3);
+          g_scx(i,j,b,4) = x_(4);
+          g_scx(i,j,b,5) = x_(5);
+          g_scy(i,j,b,0) = y_(0);
+          g_scy(i,j,b,1) = y_(1);
+          g_scy(i,j,b,2) = y_(2);
+          g_scy(i,j,b,3) = y_(3);
+          g_scy(i,j,b,4) = y_(4);
+          g_scy(i,j,b,5) = y_(5);
        }
     }
   }
@@ -235,7 +226,7 @@ void minimum_jerk_trajectories_initialize(){
   ROS_WARN("Second branches,,, %.3f ms spent...", t_duration2.count()/1000.0);
   // cout <<"       Second branches,,, " << t_duration2.count()/1000.0 << " ms spent" << endl;
 
-  local_init=true;
+  g_local_init=true;
 }
 
 

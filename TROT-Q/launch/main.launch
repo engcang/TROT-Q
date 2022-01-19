@@ -19,7 +19,7 @@
   <param name="/fixed_frame" value="map"/>
 
   <param name="/octomap_topic" value="/octomap"/>
-  <param name="/octomap_resolution" value="0.3"/>
+  <param name="/octomap_resolution" value="0.2"/>
   <param name="/octomap_hit" value="0.9"/>
   <param name="/octomap_miss" value="0.4"/>
   <param name="/octomap_hz" value="5.0"/>
@@ -28,7 +28,7 @@
   <param name="/unknown_score_local" value="0.09"/>
   <param name="/free_score_local" value="0.11"/> <!-- lambda -->
 
-  <param name="/collision_r" value="0.6"/>
+  <param name="/collision_r" value="0.25"/>
 
 
 
@@ -42,22 +42,25 @@
   <!-- <node name="mpc-control" pkg="trot-q" type="mpc-slsqp.py"/> -->
 
   <!-- YOLO -->
-  <node name="yolo_ros_simple_node" pkg="yolo_ros_simple" type="ros_open_dnn.py">
-    <param name="/inference_rate" value="10"/>
-    <param name="/img_in_topic" value="/d455/depth/rgb_image_raw"/>
-    <param name="/img_out_topic" value="/detected"/>
-    <param name="/bbox_out_topic" value="/bboxes"/>
-    <param name="/confidence_threshold" value="0.8"/>
-    <param name="/nms_threshold" value="0.4"/>
-    <param name="/class_file" value="$(find yolo_ros_simple)/scripts/class.txt"/>
-    <param name="/weight_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj_final.weights"/>
-    <param name="/cfg_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj.cfg"/>
+  <param name="/bbox_out_topic" value="/bboxes"/>
+  <node name="yolo_ros_simple_node" pkg="yolo_ros_simple" type="ros_opencv_dnn.py" output="screen">
+    <param name="inference_rate" value="10"/>
+    <param name="img_in_topic" value="/d455/depth/rgb_image_raw"/>
+    <param name="img_out_topic" value="/detected"/>
+    <param name="confidence_threshold" value="0.8"/>
+    <param name="nms_threshold" value="0.4"/>
+    <param name="class_file" value="$(find yolo_ros_simple)/scripts/class.txt"/>
+    <param name="weight_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj_final.weights"/>
+    <param name="cfg_file" value="$(find yolo_ros_simple)/scripts/yolov4-tiny-3l-obj.cfg"/>
   </node>
 
   <!-- SLAM: FAST-LIO2 -->
-  <include file="$(find trot-q)/launch/include/mapping_ouster64.launch"/>
+  <!-- <include file="$(find trot-q)/launch/include/mapping_ouster64.launch"/> -->
 
   <!-- tf publisher  -->
   <node name="tf_broadcaster" pkg="trot-q" type="tf_broadcaster.py"/>
+
+  <!-- GT to path: for visualization  -->
+  <node name="gt_visualizer" pkg="trot-q" type="visualizer.py"/>
 
 </launch>

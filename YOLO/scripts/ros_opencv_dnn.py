@@ -27,22 +27,23 @@ class cv_yolo_ros():
     def __init__(self):
         rospy.init_node('cv_yolo_ros_node', anonymous=True)
         self.flag = False
-        self.inference_rate = rospy.get_param("/inference_rate", 30)
-        self.img_in_topic = rospy.get_param("/img_in_topic", "/d455/depth/rgb_image_raw")
-        self.img_out_topic = rospy.get_param("/img_out_topic", "/detected")
+        self.inference_rate = rospy.get_param("~inference_rate", 30)
+        self.img_in_topic = rospy.get_param("~img_in_topic", "/d455/depth/rgb_image_raw")
+        self.img_out_topic = rospy.get_param("~img_out_topic", "/detected")
         self.bbox_out_topic = rospy.get_param("/bbox_out_topic", "/bboxes")
 
-        self.confidence_threshold = rospy.get_param("/confidence_threshold", 0.8)
-        self.nms_threshold = rospy.get_param("/nms_threshold", 0.4)
+        self.confidence_threshold = rospy.get_param("~confidence_threshold", 0.8)
+        self.nms_threshold = rospy.get_param("~nms_threshold", 0.4)
 
-        self.class_file = rospy.get_param("/class_file", "class.txt")
-        self.weight_file = rospy.get_param("/weight_file", "yolov4-tiny-3l-obj_final.weights")
-        self.cfg_file = rospy.get_param("/cfg_file", "yolov4-tiny-3l-obj.cfg")
-        self.backend = rospy.get_param("/backend", cv2.dnn.DNN_BACKEND_CUDA)
+        self.class_file = rospy.get_param("~class_file", "class.txt")
+        self.weight_file = rospy.get_param("~weight_file", "yolov4-tiny-3l-obj_final.weights")
+        self.cfg_file = rospy.get_param("~cfg_file", "yolov4-tiny-3l-obj.cfg")
+
+        self.backend = rospy.get_param("~backend", cv2.dnn.DNN_BACKEND_CUDA)
     ### cv2.dnn.DNN_BACKEND_CUDA for GPU, 
     ### cv2.dnn.DNN_BACKEND_OPENCV for CPU
     ### cv2.dnn.DNN_BACKEND_INFERENCE_ENGINE for OpenVINO
-        self.target = rospy.get_param("/target", cv2.dnn.DNN_TARGET_CUDA)
+        self.target = rospy.get_param("~target", cv2.dnn.DNN_TARGET_CUDA)
     ### Either DNN_TARGET_CUDA_FP16 or DNN_TARGET_CUDA must be enabled for GPU
     ### cv2.dnn.DNN_TARGET_CPU for CPU or OpenVINO
 
@@ -111,5 +112,5 @@ if __name__=='__main__':
                 cyr.box_publisher.publish(out_boxes)
             cyr.rate.sleep()
         except (rospy.ROSInterruptException, SystemExit, KeyboardInterrupt) :
-            print(avg_FPS)
+            # print(avg_FPS)
             sys.exit(0)

@@ -11,12 +11,11 @@
 #include <iostream> //cout
 #include <fstream> // ofstream, file writing
 #include <math.h> // pow
-#include <vector>
 #include <chrono> 
 #include <tf/LinearMath/Quaternion.h> // to Quaternion_to_euler
 #include <tf/LinearMath/Matrix3x3.h> // to Quaternion_to_euler
 
-///// headers for local_planner + controller
+///// headers for local_planner
 #include <std_msgs/Bool.h>
 #include <tf2_msgs/TFMessage.h> //for tf between frames
 #include <geometry_msgs/Point.h>
@@ -27,8 +26,9 @@
 #include <nav_msgs/Path.h>
 
 ///// headers for pcl + octo
+#include <yolo_ros_simple/bbox.h>
+#include <yolo_ros_simple/bboxes.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/Joy.h>
 
 #include <pcl/point_types.h>
 #include <pcl/PCLPointCloud2.h>
@@ -55,8 +55,13 @@ using namespace Eigen;
 class trot_q_class{
   public:
 
-    std::string m_pcl_topic, m_depth_topic, m_pcl_base, m_depth_base, m_body_base, m_fixed_frame, m_octomap_topic; 
-    bool m_depth_check=false, m_pcl_check=false, m_tf_check=false, m_octo_check=false, m_body_t_cam_check=false, m_body_t_lidar_check=false;
+    std::string m_pcl_topic, m_depth_topic, m_pcl_base, m_depth_base, m_body_base, m_fixed_frame, m_octomap_topic, m_bbox_out_topic; 
+    bool m_bbox_check=false, m_depth_check=false, m_pcl_check=false, m_tf_check=false, m_octo_check=false, m_body_t_cam_check=false, m_body_t_lidar_check=false;
+
+    ///// for yolo and pcl
+    cv_bridge::CvImagePtr m_depth_ptr;
+    double m_scale_factor;
+    geometry_msgs::Point m_detected_center;
 
     ///// octomap
     double m_pcl_max_range=0.0, m_f_x, m_f_y, m_c_x, m_c_y, m_hfov;
@@ -84,6 +89,7 @@ class trot_q_class{
     ros::Subscriber m_depth_sub;
     ros::Subscriber m_tf_sub;
     ros::Subscriber m_new_path_sub;
+    ros::Subscriber m_bbox_sub;
     ros::Publisher m_octomap_pub, m_octomap_empty_pub;
     ros::Publisher m_best_branch_pub;
     ros::Publisher m_local_branch_pub;
@@ -96,6 +102,7 @@ class trot_q_class{
     ros::Publisher m_local_branch_pub15;
     ros::Publisher m_local_branch_pub16;
     ros::Publisher m_contact_points_pub;
+    ros::Publisher m_detected_target_pcl_pub;
 
     ros::Timer m_octo_update_and_publisher;
     ros::Timer m_local_planner_thread;
@@ -104,6 +111,7 @@ class trot_q_class{
     void pcl_callback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void tf_callback(const tf2_msgs::TFMessage::ConstPtr& msg);
     void new_path_callback(const std_msgs::Bool::ConstPtr& msg);
+    void bbox_callback(const yolo_ros_simple::bboxes::ConstPtr& msg);
     void octomap_Timer(const ros::TimerEvent& event);
     void local_planner_Timer(const ros::TimerEvent& event);
 
@@ -117,6 +125,7 @@ class trot_q_class{
       nh.param("/c_x", m_c_x, 320.5);
       nh.param("/c_y", m_c_y, 240.5);
 
+      nh.param<std::string>("/bbox_out_topic", m_bbox_out_topic, "/bboxes");
       nh.param<std::string>("/pcl_topic", m_pcl_topic, "/velodyne_points");
       nh.param<std::string>("/depth_topic", m_depth_topic, "/d455/depth/image_raw");
       nh.param<std::string>("/pcl_base", m_pcl_base, "velodyne_base_link");
@@ -143,10 +152,12 @@ class trot_q_class{
       m_pcl_sub = nh.subscribe<sensor_msgs::PointCloud2>(m_pcl_topic, 10, &trot_q_class::pcl_callback, this);
       m_tf_sub = nh.subscribe<tf2_msgs::TFMessage>("/tf", 10, &trot_q_class::tf_callback, this);
       m_new_path_sub = nh.subscribe<std_msgs::Bool>("/new_path", 10, &trot_q_class::new_path_callback, this);
+      m_bbox_sub = nh.subscribe<yolo_ros_simple::bboxes>(m_bbox_out_topic, 10, &trot_q_class::bbox_callback, this);
 
       m_octomap_pub = nh.advertise<sensor_msgs::PointCloud2>(m_octomap_topic, 10);
       m_octomap_empty_pub = nh.advertise<sensor_msgs::PointCloud2>(m_octomap_topic+"_empty", 10);
       m_contact_points_pub = nh.advertise<sensor_msgs::PointCloud2>("/contact_points", 10);
+      m_detected_target_pcl_pub = nh.advertise<sensor_msgs::PointCloud2>("/detected_target_pcl", 10);
 
       m_octo_update_and_publisher = nh.createTimer(ros::Duration(1/m_octomap_hz), &trot_q_class::octomap_Timer, this); // every hz
       m_local_planner_thread = nh.createTimer(ros::Duration(1/20.0), &trot_q_class::local_planner_Timer, this); // every 1/20 second.
@@ -196,12 +207,13 @@ void trot_q_class::depth_callback(const sensor_msgs::Image::ConstPtr& msg){
     m_depth_cvt_pcl.clear();
     m_depth_cvt_pcl_empty.clear();
     if (depth.encoding=="32FC1"){
-      cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth, "32FC1"); // == sensor_msgs::image_encodings::TYPE_32FC1
-      for (int i=0; i<depth_ptr->image.rows; i++){
-        for (int j=0; j<depth_ptr->image.cols; j++){
-          float temp_depth = depth_ptr->image.at<float>(i,j); //float!!! double makes error here!!! because encoding is "32FC", float
+      m_depth_ptr = cv_bridge::toCvCopy(depth, "32FC1"); // == sensor_msgs::image_encodings::TYPE_32FC1
+      m_scale_factor=1.0;
+      for (int i=0; i<m_depth_ptr->image.rows; i++){
+        for (int j=0; j<m_depth_ptr->image.cols; j++){
+          float temp_depth = m_depth_ptr->image.at<float>(i,j); //float!!! double makes error here!!! because encoding is "32FC", float
           if (std::isnan(temp_depth)){
-            p3d_empty.z = m_pcl_max_range * cos(abs(depth_ptr->image.cols/2.0 - j)/(depth_ptr->image.cols/2.0)*m_hfov/2.0);
+            p3d_empty.z = m_pcl_max_range * cos(abs(m_depth_ptr->image.cols/2.0 - j)/(m_depth_ptr->image.cols/2.0)*m_hfov/2.0);
             p3d_empty.x = ( j - m_c_x ) * p3d_empty.z / m_f_x;
             p3d_empty.y = ( i - m_c_y ) * p3d_empty.z / m_f_y;
             m_depth_cvt_pcl_empty.push_back(p3d_empty);
@@ -216,18 +228,19 @@ void trot_q_class::depth_callback(const sensor_msgs::Image::ConstPtr& msg){
       }
     }
     else if (depth.encoding=="16UC1"){ // uint16_t (stdint.h) or ushort or unsigned_short
-      cv_bridge::CvImagePtr depth_ptr = cv_bridge::toCvCopy(depth, "16UC1"); // == sensor_msgs::image_encodings::TYPE_16UC1
-      for (int i=0; i<depth_ptr->image.rows; i++){
-        for (int j=0; j<depth_ptr->image.cols; j++){
-          float temp_depth = depth_ptr->image.at<ushort>(i,j); //ushort!!! other makes error here!!! because encoding is "16UC"
+      m_depth_ptr = cv_bridge::toCvCopy(depth, "16UC1"); // == sensor_msgs::image_encodings::TYPE_16UC1
+      m_scale_factor=1000.0;
+      for (int i=0; i<m_depth_ptr->image.rows; i++){
+        for (int j=0; j<m_depth_ptr->image.cols; j++){
+          float temp_depth = m_depth_ptr->image.at<ushort>(i,j); //ushort!!! other makes error here!!! because encoding is "16UC"
           if (std::isnan(temp_depth)){
-            p3d_empty.z = m_pcl_max_range * cos(abs(depth_ptr->image.cols/2.0 - j)/(depth_ptr->image.cols/2.0)*m_hfov/2.0);
+            p3d_empty.z = m_pcl_max_range * cos(abs(m_depth_ptr->image.cols/2.0 - j)/(m_depth_ptr->image.cols/2.0)*m_hfov/2.0);
             p3d_empty.x = ( j - m_c_x ) * p3d_empty.z / m_f_x;
             p3d_empty.y = ( i - m_c_y ) * p3d_empty.z / m_f_y;
             m_depth_cvt_pcl_empty.push_back(p3d_empty);
           }
-          else if (temp_depth/1000.0 >= 0.1 and temp_depth/1000.0 <= m_pcl_max_range){
-            p3d.z = (temp_depth/1000.0); 
+          else if (temp_depth/m_scale_factor >= 0.1 and temp_depth/m_scale_factor <= m_pcl_max_range){
+            p3d.z = (temp_depth/m_scale_factor); 
             p3d.x = ( j - m_c_x ) * p3d.z / m_f_x;
             p3d.y = ( i - m_c_y ) * p3d.z / m_f_y;
             m_depth_cvt_pcl.push_back(p3d);
@@ -241,6 +254,56 @@ void trot_q_class::depth_callback(const sensor_msgs::Image::ConstPtr& msg){
   catch (cv_bridge::Exception& e) {
     ROS_ERROR("Error to cvt depth img");
     return;
+  }
+}
+
+
+void trot_q_class::bbox_callback(const yolo_ros_simple::bboxes::ConstPtr& msg){
+  if (msg->bboxes.size() < 1)
+    return;
+
+  yolo_ros_simple::bbox in_bbox = msg->bboxes[0];
+
+  if (m_depth_check){
+    geometry_msgs::Point p3d_center;
+    pcl::PointXYZ p3d;
+    int pcl_size=0;
+    for (int i=in_bbox.y; i < in_bbox.y + in_bbox.height; i++){
+      for (int j=in_bbox.x; j < in_bbox.x + in_bbox.width; j++){
+        float temp_depth = 0.0;
+        if (m_scale_factor==1.0){
+          temp_depth = m_depth_ptr->image.at<float>(i,j); //float!!! double makes error here!!! because encoding is "32FC", float
+        }
+        else if (m_scale_factor==1000.0){
+          temp_depth = m_depth_ptr->image.at<ushort>(i,j); //ushort!!! other makes error here!!! because encoding is "16UC"
+        }
+        if (std::isnan(temp_depth) or temp_depth==0.0){
+          continue;
+        }
+        else if (temp_depth/m_scale_factor >= 0.1 and temp_depth/m_scale_factor <= m_pcl_max_range){
+          p3d.z = (temp_depth/m_scale_factor); 
+          p3d.x = ( j - m_c_x ) * p3d.z / m_f_x;
+          p3d.y = ( i - m_c_y ) * p3d.z / m_f_y;
+
+          p3d_center.x += p3d.x;
+          p3d_center.y += p3d.y;
+          p3d_center.z += p3d.z;
+          pcl_size++;
+        }
+      }
+    }
+    if (pcl_size>0){
+      p3d_center.x /= (float)pcl_size;
+      p3d_center.y /= (float)pcl_size;
+      p3d_center.z /= (float)pcl_size;
+
+      m_detected_center = p3d_center;
+
+      pcl::PointCloud<pcl::PointXYZ>::Ptr detected_center_pub(new pcl::PointCloud<pcl::PointXYZ>());
+      detected_center_pub->push_back( pcl::PointXYZ(p3d_center.x, p3d_center.y-0.5, p3d_center.z) );
+      m_detected_target_pcl_pub.publish(cloud2msg(*detected_center_pub, m_depth_base));
+      m_bbox_check=true;
+    }
   }
 }
 
@@ -384,15 +447,15 @@ void trot_q_class::octomap_Timer(const ros::TimerEvent& event){
 
 
 void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
-  if (m_octo_check && local_init){
+  if (m_octo_check && g_local_init){
     // tic();
     pcl::PointCloud<pcl::PointXYZ>::Ptr contact_pcl_pub(new pcl::PointCloud<pcl::PointXYZ>());
     int id = 1;
     int sid = 1000;
     bool big_branch_ok = false;
-    loc_score = MatrixXd::Zero(row,col); 
-    for (int i=0; i < row; i++){
-      for (int j=0; j < col; j++){
+    g_loc_score = MatrixXd::Zero(g_row, g_col); 
+    for (int i=0; i < g_row; i++){
+      for (int j=0; j < g_col; j++){
         visualization_msgs::Marker path;
         path.ns = "loc";
         path.header.frame_id = m_fixed_frame;
@@ -412,28 +475,28 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
         path.pose.orientation.w = m_cvt_quat_w;
         // path.header.stamp = ros::Time::now();
 
-        float t = 0.4*T;
+        float t = 0.4*g_T;
         geometry_msgs::Point p;
-        p.x = cx(i,j,0)*pow(t,5) + cx(i,j,1)*pow(t,4) + cx(i,j,2)*pow(t,3) + cx(i,j,3)*pow(t,2) + cx(i,j,4)*t + cx(i,j,5);
-        p.y = cy(i,j,0)*pow(t,5) + cy(i,j,1)*pow(t,4) + cy(i,j,2)*pow(t,3) + cy(i,j,3)*pow(t,2) + cy(i,j,4)*t + cy(i,j,5);
-        p.z = cz(i,0)*pow(t,5) + cz(i,1)*pow(t,4) + cz(i,2)*pow(t,3) + cz(i,3)*pow(t,2) + cz(i,4)*t + cz(i,5);
+        p.x = g_cx(i,j,0)*pow(t,5) + g_cx(i,j,1)*pow(t,4) + g_cx(i,j,2)*pow(t,3) + g_cx(i,j,3)*pow(t,2) + g_cx(i,j,4)*t + g_cx(i,j,5);
+        p.y = g_cy(i,j,0)*pow(t,5) + g_cy(i,j,1)*pow(t,4) + g_cy(i,j,2)*pow(t,3) + g_cy(i,j,3)*pow(t,2) + g_cy(i,j,4)*t + g_cy(i,j,5);
+        p.z = g_cz(i,0)*pow(t,5) + g_cz(i,1)*pow(t,4) + g_cz(i,2)*pow(t,3) + g_cz(i,3)*pow(t,2) + g_cz(i,4)*t + g_cz(i,5);
         geometry_msgs::Point tf_p = tf_point(p, m_map_t_body);
         Vector3d p1(tf_p.x, tf_p.y, tf_p.z);
 
-        t = T;
-        p.x = cx(i,j,0)*pow(t,5) + cx(i,j,1)*pow(t,4) + cx(i,j,2)*pow(t,3) + cx(i,j,3)*pow(t,2) + cx(i,j,4)*t + cx(i,j,5);
-        p.y = cy(i,j,0)*pow(t,5) + cy(i,j,1)*pow(t,4) + cy(i,j,2)*pow(t,3) + cy(i,j,3)*pow(t,2) + cy(i,j,4)*t + cy(i,j,5);
-        p.z = cz(i,0)*pow(t,5) + cz(i,1)*pow(t,4) + cz(i,2)*pow(t,3) + cz(i,3)*pow(t,2) + cz(i,4)*t + cz(i,5);
+        t = g_T;
+        p.x = g_cx(i,j,0)*pow(t,5) + g_cx(i,j,1)*pow(t,4) + g_cx(i,j,2)*pow(t,3) + g_cx(i,j,3)*pow(t,2) + g_cx(i,j,4)*t + g_cx(i,j,5);
+        p.y = g_cy(i,j,0)*pow(t,5) + g_cy(i,j,1)*pow(t,4) + g_cy(i,j,2)*pow(t,3) + g_cy(i,j,3)*pow(t,2) + g_cy(i,j,4)*t + g_cy(i,j,5);
+        p.z = g_cz(i,0)*pow(t,5) + g_cz(i,1)*pow(t,4) + g_cz(i,2)*pow(t,3) + g_cz(i,3)*pow(t,2) + g_cz(i,4)*t + g_cz(i,5);
         tf_p = tf_point(p, m_map_t_body);
         Vector3d p2(tf_p.x, tf_p.y, tf_p.z);
         big_branch_ok = !(collisionLine_and_traversable(m_octree, p1, p2, m_collision_r));
 
         if(big_branch_ok){
-          for (double t=0.1*T; t<= T; t+=0.1*T){
+          for (double t=0.1*g_T; t<= g_T; t+=0.1*g_T){
             geometry_msgs::Point p;
-            p.x = cx(i,j,0)*pow(t,5) + cx(i,j,1)*pow(t,4) + cx(i,j,2)*pow(t,3) + cx(i,j,3)*pow(t,2) + cx(i,j,4)*t + cx(i,j,5);
-            p.y = cy(i,j,0)*pow(t,5) + cy(i,j,1)*pow(t,4) + cy(i,j,2)*pow(t,3) + cy(i,j,3)*pow(t,2) + cy(i,j,4)*t + cy(i,j,5);
-            p.z = cz(i,0)*pow(t,5) + cz(i,1)*pow(t,4) + cz(i,2)*pow(t,3) + cz(i,3)*pow(t,2) + cz(i,4)*t + cz(i,5);
+            p.x = g_cx(i,j,0)*pow(t,5) + g_cx(i,j,1)*pow(t,4) + g_cx(i,j,2)*pow(t,3) + g_cx(i,j,3)*pow(t,2) + g_cx(i,j,4)*t + g_cx(i,j,5);
+            p.y = g_cy(i,j,0)*pow(t,5) + g_cy(i,j,1)*pow(t,4) + g_cy(i,j,2)*pow(t,3) + g_cy(i,j,3)*pow(t,2) + g_cy(i,j,4)*t + g_cy(i,j,5);
+            p.z = g_cz(i,0)*pow(t,5) + g_cz(i,1)*pow(t,4) + g_cz(i,2)*pow(t,3) + g_cz(i,3)*pow(t,2) + g_cz(i,4)*t + g_cz(i,5);
 
             geometry_msgs::Point tf_p = tf_point(p, m_map_t_body);
             path.points.push_back(p);
@@ -443,7 +506,7 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
           id++;
 
           bool s_branch_ok = false;
-          for (int b=0; b < branch; b++){
+          for (int b=0; b < g_branch; b++){
             visualization_msgs::Marker spath;
             spath.ns = "s_loc";
             spath.header.frame_id = m_fixed_frame;
@@ -463,11 +526,11 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
             spath.pose.orientation.w = m_cvt_quat_w;
             // spath.header.stamp = ros::Time::now();
 
-            for (double t=0.0; t<= T; t+=0.1*T){
+            for (double t=0.0; t<= g_T; t+=0.1*g_T){
               geometry_msgs::Point p;
-              p.x = scx(i,j,b,0)*pow(t,5) + scx(i,j,b,1)*pow(t,4) + scx(i,j,b,2)*pow(t,3) + scx(i,j,b,3)*pow(t,2) + scx(i,j,b,4)*t + scx(i,j,b,5);
-              p.y = scy(i,j,b,0)*pow(t,5) + scy(i,j,b,1)*pow(t,4) + scy(i,j,b,2)*pow(t,3) + scy(i,j,b,3)*pow(t,2) + scy(i,j,b,4)*t + scy(i,j,b,5);
-              p.z = scz(i,0)*pow(t,5) + scz(i,1)*pow(t,4) + scz(i,2)*pow(t,3) + scz(i,3)*pow(t,2) + scz(i,4)*t + scz(i,5);
+              p.x = g_scx(i,j,b,0)*pow(t,5) + g_scx(i,j,b,1)*pow(t,4) + g_scx(i,j,b,2)*pow(t,3) + g_scx(i,j,b,3)*pow(t,2) + g_scx(i,j,b,4)*t + g_scx(i,j,b,5);
+              p.y = g_scy(i,j,b,0)*pow(t,5) + g_scy(i,j,b,1)*pow(t,4) + g_scy(i,j,b,2)*pow(t,3) + g_scy(i,j,b,3)*pow(t,2) + g_scy(i,j,b,4)*t + g_scy(i,j,b,5);
+              p.z = g_scz(i,0)*pow(t,5) + g_scz(i,1)*pow(t,4) + g_scz(i,2)*pow(t,3) + g_scz(i,3)*pow(t,2) + g_scz(i,4)*t + g_scz(i,5);
 
               geometry_msgs::Point tf_p = tf_point(p, m_map_t_body);
 
@@ -481,7 +544,7 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
                 else{ // not occupied -> free space
                   octomap::point3d end_point;
                   if (m_octree->castRay(octomap::point3d(tf_p.x, tf_p.y, tf_p.z), octomap::point3d(0, 0, -1), end_point, false, 0.8)){
-                    loc_score(i,j)+=m_free_score_local;
+                    g_loc_score(i,j)+=m_free_score_local;
                     spath.points.push_back(p);
                     s_branch_ok=true;
                     contact_pcl_pub->push_back(pcl::PointXYZ(end_point.x(), end_point.y(), end_point.z()+m_octomap_resolution));
@@ -495,7 +558,7 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
               else{ // not searched yet -> unknown space
                 octomap::point3d end_point;
                 if (m_octree->castRay(octomap::point3d(tf_p.x, tf_p.y, tf_p.z), octomap::point3d(0, 0, -1), end_point, false, 0.8)){
-                  loc_score(i,j)+=m_unknown_score_local;
+                  g_loc_score(i,j)+=m_unknown_score_local;
                   spath.points.push_back(p);
                   s_branch_ok=true;
                   contact_pcl_pub->push_back(pcl::PointXYZ(end_point.x(), end_point.y(), end_point.z()+m_octomap_resolution));
@@ -507,17 +570,17 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
               }
             }
             if (s_branch_ok){
-              if (sid<1000+row*col)
+              if (sid<1000+g_row*g_col)
                 m_local_branch_pub10.publish(spath);
-              else if(sid<1000+row*col*2)
+              else if(sid<1000+g_row*g_col*2)
                 m_local_branch_pub11.publish(spath);
-              else if(sid<1000+row*col*3)
+              else if(sid<1000+g_row*g_col*3)
                 m_local_branch_pub12.publish(spath);
-              else if(sid<1000+row*col*4)
+              else if(sid<1000+g_row*g_col*4)
                 m_local_branch_pub13.publish(spath);
-              else if(sid<1000+row*col*5)
+              else if(sid<1000+g_row*g_col*5)
                 m_local_branch_pub14.publish(spath);
-              else if(sid<1000+row*col*6)
+              else if(sid<1000+g_row*g_col*6)
                 m_local_branch_pub15.publish(spath);
               else
                 m_local_branch_pub16.publish(spath);
@@ -531,30 +594,67 @@ void trot_q_class::local_planner_Timer(const ros::TimerEvent& event){
       m_contact_points_pub.publish(cloud2msg(*contact_pcl_pub, m_fixed_frame));
     // toc("peacock");
 
-    if(m_new_path){
-      best_score_path(loc_score);
-      if (m_score_debug) 
-        {cout << max_score << " " << best_row << " " << best_col << endl<< loc_score << endl <<endl;}
+    if (m_bbox_check){
+      ///// if close enough, then stay still
+      MatrixXf center_after_tf(4,1);
+      center_after_tf << m_detected_center.x, m_detected_center.y, m_detected_center.z, 1.0;
+      center_after_tf = m_map_t_cam * center_after_tf;
+      if (euclidean_dist(center_after_tf(0), center_after_tf(1), center_after_tf(2), m_map_t_body(0,3), m_map_t_body(1,3), m_map_t_body(2,3)) < 1.5){
+        nav_msgs::Path path;
+        path.header.frame_id = m_fixed_frame;
+        for (int i = 0; i < 10; ++i){
+          geometry_msgs::PoseStamped p;
+          p.pose.position.x = m_map_t_body(0,3);
+          p.pose.position.y = m_map_t_body(1,3);
+          p.pose.position.z = m_map_t_body(2,3);
 
-      nav_msgs::Path path;
-      path.header.frame_id = m_fixed_frame;
-      geometry_msgs::PoseStamped p;
-      for (double t=0.0; t<= T; t+=0.1*T){
-        p.pose.position.x = cx(best_row,best_col,0)*pow(t,5) + cx(best_row,best_col,1)*pow(t,4) + cx(best_row,best_col,2)*pow(t,3) + cx(best_row,best_col,3)*pow(t,2) + cx(best_row,best_col,4)*t + cx(best_row,best_col,5);
-        p.pose.position.y = cy(best_row,best_col,0)*pow(t,5) + cy(best_row,best_col,1)*pow(t,4) + cy(best_row,best_col,2)*pow(t,3) + cy(best_row,best_col,3)*pow(t,2) + cy(best_row,best_col,4)*t + cy(best_row,best_col,5);
-        p.pose.position.z = cz(best_row,0)*pow(t,5) + cz(best_row,1)*pow(t,4) + cz(best_row,2)*pow(t,3) + cz(best_row,3)*pow(t,2) + cz(best_row,4)*t + cz(best_row,5);
-        tf::Quaternion q;
-        q.setRPY(0, 0, yaw(best_row,best_col)*t/T);
-        p.pose.orientation.x = q.getX();
-        p.pose.orientation.y = q.getY();
-        p.pose.orientation.z = q.getZ();
-        p.pose.orientation.w = q.getW();
-
-        geometry_msgs::PoseStamped tf_p = tf_pose(p, m_map_t_body);
-        path.poses.push_back(tf_p);
+          p.pose.orientation.x = m_cvt_quat_x;
+          p.pose.orientation.y = m_cvt_quat_y;
+          p.pose.orientation.z = m_cvt_quat_z;
+          p.pose.orientation.w = m_cvt_quat_w;
+          path.poses.push_back(p);
+        }
+        m_best_branch_pub.publish(path);
+        m_new_path=false;
+        return;
       }
-      m_best_branch_pub.publish(path);
-      m_new_path=false;
+
+      if(m_new_path){
+        g_distance_score=MatrixXd::Zero(g_row,g_col);
+        for (int i = 0; i < g_row; i++){
+          for (int j = 0; j < g_col; j++){
+            geometry_msgs::Point ppp;
+            ppp.x = g_x_2(i,j); ppp.y = g_y_2(i,j); ppp.z = g_z_2(i,0);
+            geometry_msgs::Point tf_p = tf_point(ppp, m_map_t_body);
+            g_distance_score(i,j) = euclidean_dist(center_after_tf(0), center_after_tf(1), center_after_tf(2), tf_p.x, tf_p.y, tf_p.z);
+          }
+        }
+        g_distance_score=g_distance_score.cwiseInverse()*10.0;
+        best_score_path(g_loc_score, g_distance_score);
+
+        if (m_score_debug) 
+          {cout << g_max_score << " " << g_best_row << " " << g_best_col << endl << g_loc_score << endl << g_distance_score <<endl << endl;}
+
+        nav_msgs::Path path;
+        path.header.frame_id = m_fixed_frame;
+        geometry_msgs::PoseStamped p;
+        for (double t=0.0; t<= g_T; t+=0.1*g_T){
+          p.pose.position.x = g_cx(g_best_row,g_best_col,0)*pow(t,5) + g_cx(g_best_row,g_best_col,1)*pow(t,4) + g_cx(g_best_row,g_best_col,2)*pow(t,3) + g_cx(g_best_row,g_best_col,3)*pow(t,2) + g_cx(g_best_row,g_best_col,4)*t + g_cx(g_best_row,g_best_col,5);
+          p.pose.position.y = g_cy(g_best_row,g_best_col,0)*pow(t,5) + g_cy(g_best_row,g_best_col,1)*pow(t,4) + g_cy(g_best_row,g_best_col,2)*pow(t,3) + g_cy(g_best_row,g_best_col,3)*pow(t,2) + g_cy(g_best_row,g_best_col,4)*t + g_cy(g_best_row,g_best_col,5);
+          p.pose.position.z = g_cz(g_best_row,0)*pow(t,5) + g_cz(g_best_row,1)*pow(t,4) + g_cz(g_best_row,2)*pow(t,3) + g_cz(g_best_row,3)*pow(t,2) + g_cz(g_best_row,4)*t + g_cz(g_best_row,5);
+          tf::Quaternion q;
+          q.setRPY(0, 0, g_yaw(g_best_row,g_best_col)*t/g_T);
+          p.pose.orientation.x = q.getX();
+          p.pose.orientation.y = q.getY();
+          p.pose.orientation.z = q.getZ();
+          p.pose.orientation.w = q.getW();
+
+          geometry_msgs::PoseStamped tf_p = tf_pose(p, m_map_t_body);
+          path.poses.push_back(tf_p);
+        }
+        m_best_branch_pub.publish(path);
+        m_new_path=false;
+      }
     }
   }
 }

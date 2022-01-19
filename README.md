@@ -30,6 +30,8 @@ $ cd ~/your_workspace/src
 
 $ git clone --recursive https://github.com/engcang/ascc2022
 
+$ cd ascc2022/
+
 $ echo "export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:$(pwd)/gazebo_maps/height_maze" >> ~/.bashrc
 $ . ~/.bashrc
 

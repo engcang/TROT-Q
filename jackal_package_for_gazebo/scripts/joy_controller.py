@@ -32,7 +32,7 @@ class robot():
 
         self.joy_check=0
 
-        self.max_vel = 0.6
+        self.max_vel = 1.2
         self.yaw_rate = 1.0
 
     def joy_callback(self, msg):
