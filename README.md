@@ -6,7 +6,7 @@
 + Minimum Jerk Trajectory is tracked
 + High-level velocity MPC control
 + Low-level PID control
-
+#### Video - https://youtu.be/hEQSOyfWevY
 
 <br>
 
