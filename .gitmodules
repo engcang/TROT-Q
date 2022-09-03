@@ -1,12 +1,12 @@
 [submodule "champ"]
 	path = champ
 	url = https://github.com/engcang/champ
-[submodule "gazebo_maps"]
-	path = gazebo_maps
-	url = https://github.com/engcang/gazebo_maps
 [submodule "SLAM/livox_ros_driver"]
 	path = SLAM/livox_ros_driver
 	url = https://github.com/Livox-SDK/livox_ros_driver.git
 [submodule "SLAM/FAST_LIO"]
 	path = SLAM/FAST_LIO
 	url = https://github.com/hku-mars/FAST_LIO
+[submodule "gazebo_maps"]
+	path = gazebo_maps
+	url = https://github.com/engcang/gazebo_maps

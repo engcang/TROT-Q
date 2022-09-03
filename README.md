@@ -30,12 +30,15 @@ $ cd ~/your_workspace/src
 
 $ git clone --recursive https://github.com/engcang/ascc2022
 
-$ cd ascc2022/
-
-$ echo "export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:$(pwd)/gazebo_maps/height_maze" >> ~/.bashrc
-$ . ~/.bashrc
+$ cd ascc2022/gazebo_maps
+$ tar -xf height_maze.tar.xz
+$ tar -xf common_models.tar.xz
 
 $ cd ..
+$ echo "export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:$(pwd)/gazebo_maps/height_maze:$(pwd)/gazebo_maps/common_models" >> ~/.bashrc
+$ . ~/.bashrc
+
+$ cd ~/your_workspace
 $ catkin build -DCMAKE_BUILD_TYPE=Release
 ~~~
 
