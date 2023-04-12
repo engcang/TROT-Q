@@ -39,7 +39,7 @@
                       <!-- launch-prefix="gdb -ex run --> <!--args" -->
 
   <!-- High-level control code (MPC) -->
-  <!-- <node name="mpc-control" pkg="trot-q" type="mpc-slsqp.py"/> -->
+  <node name="mpc-control" pkg="trot-q" type="mpc-slsqp.py"/>
 
   <!-- YOLO -->
   <param name="/bbox_out_topic" value="/bboxes"/>
@@ -55,7 +55,7 @@
   </node>
 
   <!-- SLAM: FAST-LIO2 -->
-  <!-- <include file="$(find trot-q)/launch/include/mapping_ouster64.launch"/> -->
+  <include file="$(find trot-q)/launch/include/mapping_ouster64.launch"/>
 
   <!-- tf publisher  -->
   <node name="tf_broadcaster" pkg="trot-q" type="tf_broadcaster.py"/>
