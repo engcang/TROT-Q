@@ -28,9 +28,9 @@ $ sudo apt upgrade libignition-math4
 ~~~shell
 $ cd ~/your_workspace/src
 
-$ git clone --recursive https://github.com/engcang/ascc2022
+$ git clone --recursive https://github.com/engcang/trot-q
 
-$ cd ascc2022/gazebo_maps
+$ cd trot-q/gazebo_maps
 $ tar -xf height_maze.tar.xz
 $ tar -xf common_models.tar.xz
 
