@@ -19,8 +19,10 @@
 + Dependencies
 ~~~shell
 $ sudo apt install ros-melodic-gazebo-plugins ros-melodic-ros-control ros-melodic-ros-controllers
+$ sudo apt install ros-melodic-hector-gazebo-plugins
 
 $ wget -O ubuntu.sh https://raw.githubusercontent.com/PX4/PX4-Autopilot/master/Tools/setup/ubuntu.sh
+$ wget https://raw.githubusercontent.com/PX4/PX4-Autopilot/master/Tools/setup/requirements.txt
 $ source ubuntu.sh
 $ sudo apt upgrade libignition-math4
 ~~~
