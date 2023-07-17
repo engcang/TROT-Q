@@ -10,7 +10,7 @@
 
 <br>
 
-### Requirements
+### Dependencies
 + `OpenCV` version >= 4.4.0
 + `cv_bridge`
 + ROS and Gazebo
